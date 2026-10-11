@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supreme Commander</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="favicon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#070b10">
+  <script type="importmap">
+  { "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/examples/jsm/"
+  } }
+  </script>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <canvas id="overlay"></canvas>
+
+  <!-- ============================== IN-GAME HUD ============================== -->
+  <div id="hud" class="hidden">
+    <header id="topbar">
+      <div class="res" id="res-mass">
+        <div class="res-ico m">M</div>
+        <div class="res-body">
+          <div class="res-line"><span class="res-name">МАССА</span><span class="res-val" id="mass-val">0</span></div>
+          <div class="res-track"><div class="res-fill m" id="mass-fill"></div></div>
+          <div class="res-line"><span class="inc" id="mass-inc">+0</span><span class="exp" id="mass-exp">-0</span><span class="eff" id="mass-eff"></span></div>
+        </div>
+      </div>
+      <div class="res" id="res-energy">
+        <div class="res-ico en">E</div>
+        <div class="res-body">
+          <div class="res-line"><span class="res-name">ЭНЕРГИЯ</span><span class="res-val" id="energy-val">0</span></div>
+          <div class="res-track"><div class="res-fill en" id="energy-fill"></div></div>
+          <div class="res-line"><span class="inc" id="energy-inc">+0</span><span class="exp" id="energy-exp">-0</span><span class="eff" id="energy-eff"></span></div>
+        </div>
+      </div>
+      <div class="top-mid">
+        <div class="clock" id="game-time">00:00</div>
+        <div class="speed">
+          <button id="btn-slower" data-tip="Медленнее (−)">−</button>
+          <button id="btn-pause" data-tip="Пауза (Pause)">❚❚</button>
+          <span id="speed-val">×1</span>
+          <button id="btn-faster" data-tip="Быстрее (+)">+</button>
+        </div>
+      </div>
+      <div class="top-right">
+        <div class="pill"><span id="team-label">ИГРОК</span> · ЮНИТЫ <b id="unit-count">0</b></div>
+        <button class="tbtn hidden" id="btn-staff" data-tip="<b>Штаб</b>: помощники-лейтенанты ведут за вас экономику, армию, авиацию, флот и оборону (H).<br>Ctrl+H — передать выделенное последнему помощнику."><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.500l2.700 5.700 6.200.8-4.600 4.300 1.200 6.200L12 16.400 6.500 19.500l1.200-6.200L3.100 9l6.200-.8z"/></svg> ШТАБ<span id="staff-badge" class="badge hidden"></span></button>
+        <button class="tbtn" id="btn-ai" data-tip="Окно мыслей стратегического ИИ (F1)">🧠 МЫСЛИ ИИ</button>
+        <button class="tbtn" id="btn-overlay" data-tip="Карта угроз глазами ИИ на рельефе (F2)">🗺 УГРОЗЫ</button>
+        <button class="tbtn vr-btn" id="btn-vr" data-tip="Войти в VR / Смешанную реальность (Meta Quest)">🥽 ВОЙТИ В VR</button>
+        <button class="tbtn on" id="btn-thoughts" data-tip="Мысли выделенных юнитов над ними (F3)">💬 ЮНИТЫ</button>
+        <button class="tbtn" id="btn-menu" data-tip="Меню (Esc / F10)">☰</button>
+      </div>
+    </header>
+
+    <div id="notes"></div>
+    <div id="mode-hint" class="hidden"></div>
+    <div id="ghost-why"></div>
+    <div id="flash" class="hidden"></div>
+    <div id="paused-banner" class="hidden">ПАУЗА</div>
+
+    <footer id="bottom">
+      <div id="minimap-wrap" class="panel">
+        <canvas id="minimap" width="220" height="220"></canvas>
+      </div>
+      <div id="selpanel" class="panel"></div>
+      <div id="cmdpanel" class="panel">
+        <div class="cmd-head"><span id="cmd-title">КОМАНДЫ</span><div id="buildtabs"></div></div>
+        <div id="orders"></div>
+        <div id="buildgrid"></div>
+        <div id="queue"></div>
+      </div>
+    </footer>
+
+    <div id="ai-window" class="win hidden">
+      <div id="ai-head" class="win-head">
+        <span class="pulse"></span><span class="win-title">ПОТОК МЫСЛЕЙ ИИ</span>
+        <span id="ai-strat-chip" class="chip"></span>
+        <select id="ai-team-select"></select>
+        <button id="ai-close" class="x">✕</button>
+      </div>
+      <div class="ai-tabs">
+        <button class="ai-tab active" data-tab="strategy">Стратегия</button>
+        <button class="ai-tab" data-tab="memory">Память</button>
+        <button class="ai-tab" data-tab="army">Войска</button>
+        <button class="ai-tab" data-tab="log">Журнал</button>
+      </div>
+      <div id="ai-body"></div>
+    </div>
+
+    <!-- ===== Штаб: помощники-лейтенанты (js/lieutenant.js, js/staffui.js) ===== -->
+    <div id="staff-window" class="win staff-win hidden">
+      <div id="staff-head" class="win-head">
+        <span class="sw-ico"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.500l2.700 5.700 6.200.8-4.600 4.300 1.200 6.200L12 16.400 6.500 19.500l1.200-6.200L3.100 9l6.200-.8z"/></svg></span>
+        <span class="win-title">ШТАБ · ПОМОЩНИКИ</span>
+        <span id="staff-count" class="chip"></span>
+        <button id="staff-close" class="x">✕</button>
+      </div>
+      <div class="staff-bar">
+        <button id="staff-add" class="lt-b primary"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Назначить помощника</span></button>
+        <button id="staff-give" class="lt-b"></button>
+      </div>
+      <div id="staff-body"><div id="staff-list"></div><div id="staff-pick" class="hidden"></div></div>
+      <div class="staff-foot"><kbd>H</kbd> Штаб · <kbd>Ctrl+H</kbd> передать выделенное · свои приказы юнитам помощник уважает</div>
+    </div>
+    <div id="staff-selbar" class="hidden"></div>
+    <div id="staff-menu" class="hidden"></div>
+  </div>
+
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- ============================== MAIN MENU ============================== -->
+  <div id="menu" class="screen">
+    <div class="menu-box">
+      <div class="logo">
+        <div class="logo-top">SUPREME</div>
+        <div class="logo-main">COMMANDER</div>
+        <div class="logo-sub">ТАКТИЧЕСКИЙ 3D СИМУЛЯТОР</div>
+      </div>
+      <button class="mbtn primary" id="m-new">НОВАЯ ИГРА</button>
+      <button class="mbtn vr-btn" id="m-vr" style="background: linear-gradient(135deg, rgba(30,120,220,0.8), rgba(60,220,160,0.8)); font-weight: bold; border-color: #5dffb0;">🥽 ВОЙТИ В VR</button>
+      <button class="mbtn" id="m-quick">БЫСТРЫЙ БОЙ</button>
+      <button class="mbtn" id="m-watch">ИИ ПРОТИВ ИИ (НАБЛЮДЕНИЕ)</button>
+      <button class="mbtn" id="m-load">ЗАГРУЗИТЬ ИГРУ</button>
+      <button class="mbtn" id="m-memory">ПАМЯТЬ ИИ</button>
+      <button class="mbtn" id="m-settings">НАСТРОЙКИ</button>
+      <button class="mbtn" id="m-help">УПРАВЛЕНИЕ</button>
+    </div>
+  </div>
+
+  <div id="newgame" class="screen hidden">
+    <div class="ng-box">
+      <div class="ng-title">НОВАЯ ИГРА — ЛОББИ СХВАТКИ</div>
+      <div class="ng-main">
+        <div class="ng-lobby">
+          <div id="lobby-slots"></div>
+          <button class="mbtn small" id="lobby-add">+ ДОБАВИТЬ ИИ</button>
+          <div class="dim bad" id="lobby-msg"></div>
+        </div>
+        <div class="ng-side" id="map-big"></div>
+      </div>
+      <div class="ng-sub">КАРТА</div>
+      <div id="map-cards"></div>
+      <div id="gen-panel" class="hidden"></div>
+      <div class="ng-opts">
+        <label>Победа <select id="opt-victory"><option value="assassination">Убийство командира</option><option value="annihilation">Полное уничтожение</option></select></label>
+        <label>Лимит юнитов на команду <select id="opt-cap"><option value="250">250</option><option value="500">500</option><option value="1000">1000</option></select></label>
+        <label>Туман войны <input type="checkbox" id="opt-fog"></label>
+      </div>
+      <div class="ng-btns"><button class="mbtn" id="ng-back">НАЗАД</button><button class="mbtn primary" id="ng-start">В БОЙ</button></div>
+    </div>
+  </div>
+
+  <!-- ============================== MODALS ============================== -->
+  <div id="settings" class="modal hidden"><div class="modal-card wide">
+    <div class="modal-title">НАСТРОЙКИ</div>
+    <div id="settings-body"></div>
+    <div class="modal-btns"><button class="mbtn" id="settings-cancel">ОТМЕНА</button><button class="mbtn primary" id="settings-apply">ПРИМЕНИТЬ</button></div>
+  </div></div>
+
+  <div id="help" class="modal hidden"><div class="modal-card wide">
+    <div class="modal-title">УПРАВЛЕНИЕ</div>
+    <div class="help-cols">
+      <div>
+        <div class="set-h">КАМЕРА</div>
+        <p><kbd>Колесо</kbd> зум к курсору — от танка до всей карты (стратегические иконки)</p>
+        <p><kbd>Стрелки</kbd> / край экрана / <kbd>СКМ</kbd>-перетаскивание — прокрутка</p>
+        <p><kbd>Пробел</kbd> к выделенным · <kbd>Home</kbd> к командиру · клик по миникарте</p>
+        <div class="set-h">ВЫДЕЛЕНИЕ</div>
+        <p><kbd>ЛКМ</kbd> выбрать · рамка — группа · двойной клик — все такие на экране</p>
+        <p><kbd>Shift</kbd>+клик добавить/убрать · <kbd>Ctrl+1..9</kbd> создать группу · <kbd>1..9</kbd> выбрать (дважды — камера)</p>
+        <p><kbd>E</kbd> свободный инженер · <kbd>F</kbd> командир · <kbd>Esc</kbd> снять выделение / меню</p>
+      </div>
+      <div>
+        <div class="set-h">ПРИКАЗЫ (SUPREME COMMANDER)</div>
+        <p><kbd>ПКМ</kbd> контекстный: земля — движение, враг — атака, своё здание — помощь/ремонт, обломки — переработка, свой юнит — охрана</p>
+        <p><kbd>Shift</kbd>+ПКМ — очередь приказов (маршрут, серия построек)</p>
+        <p><kbd>A</kbd> атака с ходу · <kbd>P</kbd> патруль · <kbd>S</kbd> стоп · <kbd>R</kbd> переработка · <kbd>O</kbd> Сверхзаряд ACU · <kbd>U</kbd> улучшить завод/экстрактор/радар</p>
+        <p><kbd>ПКМ</kbd> с протяжкой — повернуть строй · <kbd>G</kbd> тип строя (линия, клин, колонна, каре, без строя) · <kbd>[</kbd> <kbd>]</kbd> теснота строя</p>
+        <p>Транспорт: ПКМ юнитами по своему транспорту — посадка; транспортом по юниту — подобрать; <kbd>T</kbd> — высадка</p>
+        <p>Командир: вкладка <b>УЛУЧШ.</b> в панели строительства — пушка, инженерные модули Т2/Т3, щит, броня, ресурсы</p>
+        <p>Соседство зданий: хранилища вплотную к экстракторам/электростанциям, электростанции вплотную к заводам — бонусы (подсказка при постройке)</p>
+        <p>Завод: ЛКМ +1, Shift +5, ПКМ −1 в очереди · ПКМ по карте — точка сбора · Повтор — зациклить</p>
+        <div class="set-h">ШТАБ (ПОМОЩНИКИ)</div>
+        <p><kbd>H</kbd> окно Штаба: назначить помощника-лейтенанта на область (экономика, армия, авиация, флот, оборона)</p>
+        <p><kbd>Ctrl+H</kbd> передать выделенное последнему помощнику · кнопка «Передать помощнику ▸» над панелью выделения</p>
+        <p>Помощник тратит долю дохода (бюджет), имеет журнал решений и зону ответственности; ваш приказ юниту он уважает</p>
+        <div class="set-h">ИИ</div>
+        <p><kbd>F1</kbd> окно мыслей ИИ (стратегия, память, взводы, журнал) · <kbd>F2</kbd> карта угроз ИИ · <kbd>F3</kbd> мысли юнитов</p>
+        <p><kbd>+</kbd>/<kbd>−</kbd> скорость игры · <kbd>Pause</kbd> пауза · <kbd>F5</kbd> быстрое сохранение · <kbd>F9</kbd> быстрая загрузка</p>
+        <p><kbd>Shift</kbd> (удерживать) — показать очередь приказов всех своих юнитов</p>
+      </div>
+    </div>
+    <div class="modal-btns"><button class="mbtn primary" id="help-close">ПОНЯТНО</button></div>
+  </div></div>
+
+  <div id="memory" class="modal hidden"><div class="modal-card wide">
+    <div class="modal-title">ДОЛГОВРЕМЕННАЯ ПАМЯТЬ ИИ</div>
+    <div id="memory-body"></div>
+    <div class="modal-btns"><button class="mbtn danger" id="memory-reset">СТЕРЕТЬ ПАМЯТЬ</button><button class="mbtn primary" id="memory-close">ЗАКРЫТЬ</button></div>
+  </div></div>
+
+  <div id="pause" class="modal hidden"><div class="modal-card">
+    <div class="modal-title">МЕНЮ</div>
+    <button class="mbtn primary" id="p-resume">ПРОДОЛЖИТЬ</button>
+    <button class="mbtn" id="p-save">СОХРАНИТЬ ИГРУ</button>
+    <button class="mbtn" id="p-load">ЗАГРУЗИТЬ ИГРУ</button>
+    <button class="mbtn" id="p-settings">НАСТРОЙКИ</button>
+    <button class="mbtn" id="p-help">УПРАВЛЕНИЕ</button>
+    <button class="mbtn danger" id="p-surrender">СДАТЬСЯ</button>
+    <button class="mbtn" id="p-menu">В ГЛАВНОЕ МЕНЮ</button>
+  </div></div>
+
+  <div id="saves" class="modal hidden"><div class="modal-card wide">
+    <div class="modal-title" id="saves-title">СОХРАНЕНИЯ</div>
+    <div id="saves-body"></div>
+    <div class="modal-btns"><button class="mbtn primary" id="saves-close">ЗАКРЫТЬ</button></div>
+  </div></div>
+
+  <div id="gameover" class="modal hidden"><div class="modal-card wide">
+    <div class="modal-title" id="go-title">ПОБЕДА</div>
+    <div class="go-sub" id="go-sub"></div>
+    <div id="go-stats"></div>
+    <div class="modal-btns"><button class="mbtn" id="go-watch">ОСМОТРЕТЬ ПОЛЕ БОЯ</button><button class="mbtn" id="go-again">РЕВАНШ</button><button class="mbtn primary" id="go-menu">ГЛАВНОЕ МЕНЮ</button></div>
+  </div></div>
+
+  <div id="loading" class="hidden"><div>РАЗВЁРТЫВАНИЕ ТЕАТРА ВОЕННЫХ ДЕЙСТВИЙ…</div></div>
+  <div id="boot"><div>ЗАГРУЗКА 3D-ДВИЖКА…</div><div class="boot-sub">Three.js, модели, карты</div></div>
+  <!-- Boot gate (https, PWA/APK): before any game code loads, ask the service worker for a new build. If it is ready by DEADLINE ms after launch
+       (only changed files are downloaded; the launch gesture that lets autoVR open the session is short-lived), switch it on and take this build's markup and styles, then load the game: an update takes one
+       launch and two builds never mix (that mix lost the VR menu). Slower: the game starts on the cached build, the update waits for the
+       next launch. No reload here: in the Quest APK a reloaded page loses the launch gesture and cannot start the VR session.
+       Watchdog: a module request dropped while run.py is busy leaves the page stuck on boot: reload only on a real stall (15 s). -->
+  <script>(async () => {
+    const DEADLINE = 4500, sub = () => document.querySelector('#boot .boot-sub');
+    if ('serviceWorker' in navigator && location.protocol === 'https:') try {
+      const reg = await navigator.serviceWorker.register('sw.js');
+      await Promise.race([reg.update(), new Promise(r => setTimeout(r, 2500))]);
+      const sw = reg.installing || reg.waiting;
+      if (sw && navigator.serviceWorker.controller) {   // first install (no controller): nothing to mix, the page works from the network
+        navigator.serviceWorker.onmessage = (e) => { const u = e.data && e.data.update; if (u && sub()) sub().textContent = `Обновление ${u.version}: ${u.done} / ${u.total}`; };
+        // past the deadline the new build stays waiting for the next launch; once told to activate, always wait for it (it takes ms):
+        // the game code must never load across the switch
+        let wait = true, sent = false;
+        const on = await new Promise(res => {
+          const step = () => {
+            if (wait && !sent && sw.state === 'installed') { sent = true; sw.postMessage('activate'); }
+            if (sw.state === 'activated') res(true); else if (sw.state === 'redundant') res(false);
+          };
+          sw.addEventListener('statechange', step); step(); setTimeout(() => { if (!sent) res(false); }, Math.max(0, DEADLINE - performance.now()));
+        });
+        wait = false;
+        if (on && sw.state === 'activated') {   // this document is the old build's index.html: take the new markup and styles
+          const doc = new DOMParser().parseFromString(await (await fetch('index.html')).text(), 'text/html');
+          doc.querySelectorAll('script').forEach(x => x.remove());
+          document.body.replaceChildren(...[...doc.body.childNodes].map(n => document.adoptNode(n)));
+          const css = document.querySelector('link[rel=stylesheet][href^="style.css"]');
+          if (css) css.replaceWith(Object.assign(document.createElement('style'), { textContent: await (await fetch('style.css')).text() }));
+        }
+      }
+    } catch (e) { console.warn('boot update', e); }
+    performance.setResourceTimingBufferSize(2000);
+    const t0 = performance.now();
+    (function check() { setTimeout(() => {
+      if (document.getElementById('boot').classList.contains('hidden')) return;
+      const last = Math.max(t0, ...performance.getEntriesByType('resource').map(e => e.responseEnd));
+      if (performance.now() - last < 15000) check(); else location.reload();
+    }, 5000); })();
+    import('./js/main.js');
+  })();</script>
+</body>
+</html>
